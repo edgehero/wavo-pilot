@@ -29,8 +29,12 @@ socket.on('connect', () => {
 
 socket.on('message', (message, from) => {
     console.log(`Received message from ${from}:`, message);
-    // Echo the message back
     socket.emit('message', `Device received: ${message}`);
+});
+
+socket.on('ping', (userId) => {
+    console.log(`Received ping from ${userId}`);
+    socket.emit('pong', userId);
 });
 
 socket.on('user-connected', ({ id, role }) => {

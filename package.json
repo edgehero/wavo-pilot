@@ -4,8 +4,8 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start-server": "node server.js",
-    "start-device": "node device.js",
+    "start-server": "node server/server.js",
+    "start-device": "node device/device.js",
     "start-user": "node user/user-server.js"
   },
   "author": "",

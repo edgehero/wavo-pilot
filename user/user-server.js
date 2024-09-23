@@ -1,28 +1,58 @@
-const socket = io('http://localhost:3001');  // Central WebSocket server
-const localSocket = io();  // Local user server
+// File: user/user-server.js
 
-const ROOM_ID = 'single-room';
+const express = require('express');
+const path = require('path');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
+const { io: IOClient } = require('socket.io-client');
 
-let device;
-let recvTransport;
-let consumer;
+const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer);
 
-const videoElement = document.getElementById('remoteVideo');
-const messageInput = document.getElementById('messageInput');
-const sendButton = document.getElementById('sendButton');
+const PORT = 8080;
 
-async function createDevice() {
-    device = new mediasoupClient.Device();
-    const routerRtpCapabilities = await new Promise((resolve) => {
-        socket.emit('getRouterRtpCapabilities', resolve);
-    });
-    await device.load({ routerRtpCapabilities });
-}
+// Connect to the central WebSocket server
+const centralSocket = IOClient('http://localhost:3000');
 
-// Rest of the user client code remains largely the same...
-
-localSocket.on('connect', () => {
-    console.log('Connected to user server');
+centralSocket.on('connect', () => {
+    console.log('Connected to central WebSocket server');
+    centralSocket.emit('join-room', 'user-server');
 });
 
-// You can add any user-specific local socket handling here
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+io.on('connection', (socket) => {
+    console.log('A user connected to the user server');
+
+    // Forward messages from client to central server
+    socket.on('message', (message) => {
+        centralSocket.emit('message', message);
+    });
+});
+
+// Forward events from central server to connected clients
+centralSocket.on('mediaChunk', (data) => {
+    io.emit('mediaChunk', data);
+});
+
+centralSocket.on('message', (message, from) => {
+    console.log(`Received message from ${from}:`, message);
+    io.emit('message', message, from);
+});
+
+centralSocket.on('user-connected', (data) => {
+    io.emit('user-connected', data);
+});
+
+centralSocket.on('user-disconnected', (id) => {
+    io.emit('user-disconnected', id);
+});
+
+httpServer.listen(PORT, () => {
+    console.log(`User server running on http://localhost:${PORT}`);
+});

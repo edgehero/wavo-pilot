@@ -1,83 +1,44 @@
+// File: device/device.js
+
 const { io } = require('socket.io-client');
-const mediasoupClient = require('mediasoup-client');
 
 const socket = io('http://localhost:3000');
 const ROOM_ID = 'single-room';
 
-let device;
-let sendTransport;
-let producer;
+let producerId;
 
-async function createDevice() {
-    device = new mediasoupClient.Device();
-    const routerRtpCapabilities = await new Promise((resolve) => {
-        socket.emit('getRouterRtpCapabilities', resolve);
-    });
-    await device.load({ routerRtpCapabilities });
-}
-
-async function createSendTransport() {
-    const transportOptions = await new Promise((resolve) => {
-        socket.emit('createWebRtcTransport', { producing: true }, resolve);
-    });
-    sendTransport = device.createSendTransport(transportOptions);
-
-    sendTransport.on('connect', ({ dtlsParameters }, callback, errback) => {
-        socket.emit('connectWebRtcTransport', {
-            transportId: sendTransport.id,
-            dtlsParameters
-        }, (err) => {
-            if (err) {
-                errback(err);
-            } else {
-                callback();
-            }
-        });
-    });
-
-    sendTransport.on('produce', async ({ kind, rtpParameters, appData }, callback, errback) => {
-        try {
-            const { id } = await new Promise((resolve) => {
-                socket.emit('produce', {
-                    transportId: sendTransport.id,
-                    kind,
-                    rtpParameters,
-                    appData
-                }, resolve);
-            });
-            callback({ id });
-        } catch (error) {
-            errback(error);
+function simulateMediaStream() {
+    setInterval(() => {
+        const fakeMediaChunk = Buffer.from('Fake media chunk ' + Date.now());
+        if (producerId) {
+            socket.emit('mediaChunk', { producerId, chunk: fakeMediaChunk });
         }
-    });
+    }, 1000); // Send a fake chunk every second
 }
 
-async function startStreaming() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        const track = stream.getVideoTracks()[0];
-        producer = await sendTransport.produce({ track });
-        console.log('Producer created:', producer.id);
-    } catch (error) {
-        console.error('Error starting streaming:', error);
-    }
-}
-
-socket.on('connect', async () => {
+socket.on('connect', () => {
     console.log('Connected to server');
-    try {
-        await createDevice();
-        await createSendTransport();
-        await startStreaming();
-        socket.emit('join-room', 'device');
-    } catch (error) {
-        console.error('Error during setup:', error);
-    }
+    socket.emit('join-room', 'device');
+    
+    socket.emit('createProducer', (id) => {
+        producerId = id;
+        console.log('Producer created with ID:', producerId);
+        simulateMediaStream();
+    });
 });
 
 socket.on('message', (message, from) => {
     console.log(`Received message from ${from}:`, message);
-    // Handle incoming messages here
+    // Echo the message back
+    socket.emit('message', `Device received: ${message}`);
+});
+
+socket.on('user-connected', ({ id, role }) => {
+    console.log(`User connected: ${id} as ${role}`);
+});
+
+socket.on('user-disconnected', (id) => {
+    console.log(`User disconnected: ${id}`);
 });
 
 socket.on('disconnect', () => {
@@ -87,8 +48,6 @@ socket.on('disconnect', () => {
 // Handle process termination
 process.on('SIGINT', () => {
     console.log('Shutting down...');
-    if (producer) producer.close();
-    if (sendTransport) sendTransport.close();
     socket.disconnect();
     process.exit(0);
 });

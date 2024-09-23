@@ -1,28 +1,51 @@
-const socket = io('http://localhost:3000');  // Central WebSocket server
-const localSocket = io();  // Local user server
+// File: user/public/user-client.js
 
-const ROOM_ID = 'single-room';
-
-let device;
-let recvTransport;
-let consumer;
+const socket = io();  // Connect to local user server
 
 const videoElement = document.getElementById('remoteVideo');
 const messageInput = document.getElementById('messageInput');
 const sendButton = document.getElementById('sendButton');
+const messagesDiv = document.getElementById('messages');
 
-async function createDevice() {
-    device = new mediasoupClient.Device();
-    const routerRtpCapabilities = await new Promise((resolve) => {
-        socket.emit('getRouterRtpCapabilities', resolve);
-    });
-    await device.load({ routerRtpCapabilities });
-}
-
-// Rest of the user client code remains largely the same...
-
-localSocket.on('connect', () => {
+socket.on('connect', () => {
     console.log('Connected to user server');
+    addMessage('System', 'Connected to server');
 });
 
-// You can add any user-specific local socket handling here
+socket.on('mediaChunk', ({ producerId, chunk }) => {
+    console.log(`Received media chunk from producer ${producerId}`);
+    videoElement.textContent = `Latest chunk: ${new TextDecoder().decode(chunk)}`;
+});
+
+socket.on('message', (message, from) => {
+    addMessage(from, message);
+});
+
+socket.on('user-connected', ({ id, role }) => {
+    addMessage('System', `${role} connected: ${id}`);
+});
+
+socket.on('user-disconnected', (id) => {
+    addMessage('System', `User disconnected: ${id}`);
+});
+
+sendButton.onclick = () => {
+    const message = messageInput.value;
+    if (message) {
+        socket.emit('message', message);
+        addMessage('You', message);
+        messageInput.value = '';
+    }
+};
+
+function addMessage(from, message) {
+    const messageElement = document.createElement('p');
+    messageElement.textContent = `${from}: ${message}`;
+    messagesDiv.appendChild(messageElement);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+socket.on('disconnect', () => {
+    console.log('Disconnected from user server');
+    addMessage('System', 'Disconnected from server');
+});

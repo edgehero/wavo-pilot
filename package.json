@@ -14,6 +14,7 @@
     "express": "^4.21.0",
     "mediasoup": "^3.14.14",
     "mediasoup-client": "^3.7.16",
+    "node-webcam": "^0.8.2",
     "socket.io": "^4.8.0",
     "socket.io-client": "^4.8.0"
   }
